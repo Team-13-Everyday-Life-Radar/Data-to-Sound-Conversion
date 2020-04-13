@@ -1,0 +1,79 @@
+% angle = target_angle_deg and range = max(target)
+            angle = target_angle_deg;
+            range = max(tgt_range(1,:)); % current range
+            instrument = "guitar";
+            audio_delay = 5; % How long do you want to pause the audio before the next note plays? (in seconds)
+            
+%             collision = app.CollisionpreventionatButton.Value;
+%             d_collision = app.metersawayEditField.Value;
+%             beep;
+            
+            max_range = 3;
+            min_range = 0.9;
+            range_interval = (max_range-min_range)/4
+            angle_buffer = 10; % +/- angle limit = radar won't play audio when target is between -10 degrees and +10 degrees
+            range_buffer = 0.1; % if detected range varies greater than +/-0.1 meters than it's previous position, then no audio will play during that time.
+            
+            % Range intervals - 4 sections
+            s1_range = max_range - (range_interval);
+            s2_range = max_range - (2*range_interval);
+            s4_range = max_range - (3*range_interval);
+            s3_range = min_range;
+            
+            % Section midpoints (range)
+            m1_range = (max_range+s1_range)/2;
+            m2_range = (s1_range+s2_range)/2;
+            m3_range = (s2_range+s4_range)/2;
+            m4_range = (s4_range+s3_range)/2;
+            
+            syms a b y Fs % establishing variables
+            if range <= max_range && range >= 0.9 % limits audio output when target is out of bounds
+                if abs(range - (max(tgt_range(2,:)))) <= 0.1
+                    if angle >= angle_buffer
+                            if range <= max_range && range > s1_range
+                                Fo = 349; % F
+                            elseif range <= s1_range && range > s2_range
+                                Fo = 392; % G
+                            elseif range <= s2_range && range >= s4_range
+                                Fo = 440; % A
+                            elseif range <= s4_range && range>= s3_range
+                                Fo = 494; % B
+                            end                                               
+                    elseif angle < angle_buffer 
+                            if range <= max_range && range > s1_range
+                                Fo = 349; % F
+                            elseif range <= s1_range && range > s2_range
+                                Fo = 330; % E
+                            elseif range <= s2_range && range >= s4_range
+                                Fo = 294; % D
+                            elseif range <= s4_range && range>= s3_range
+                                Fo = 262; % C
+                            end
+                    end
+                
+                
+                    if instrument == "guitar"
+                        Fs_audio = 44100;
+                        x = zeros(Fs_audio*4, 1);
+                        delay = round(Fs_audio/Fo);
+                        b  = firls(42, [0 1/delay 2/delay 1], [0 0 1 1]);
+                        a  = [1 zeros(1, delay) -0.5 -0.5];
+        
+                        zi = rand(max(length(b),length(a))-1,1);
+                        note = filter(b, a, x, zi);
+                        note = note-mean(note);
+                        note = note/max(abs(note));
+                        hplayer = audioplayer(note, Fs_audio); play(hplayer)
+                        pause(audio_delay) 
+                    
+                    elseif instrument == "piano"
+                          vector = 1./logspace(1,3,(4*7000)+1);
+                          t = 0:1/7000:4;
+                          signal = vector.*(5*(sin(2*pi*Fo*t))+(3*sin((2*pi*Fo*2*t)))+(.5*sin((2*pi*Fo*3*t)))+(0.05*sin(2*pi*Fo*4*t)));
+                          soundsc(signal)
+                          pause(audio_delay)
+                    end
+                else
+                end
+            else
+            end 
