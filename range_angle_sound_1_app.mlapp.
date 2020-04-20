@@ -1,0 +1,173 @@
+classdef range_angle_sound_1_app < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure            matlab.ui.Figure
+        StartStopButton     matlab.ui.control.StateButton
+        UIAxes              matlab.ui.control.UIAxes
+        AngledegGaugeLabel  matlab.ui.control.Label
+        AngledegGauge       matlab.ui.control.SemicircularGauge
+        RangemGaugeLabel    matlab.ui.control.Label
+        RangemGauge         matlab.ui.control.LinearGauge
+    end
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Value changed function: StartStopButton
+        function StartStopButtonValueChanged(app, event)
+            value = app.StartStopButton.Value;
+            
+
+            addpath('..\..\RadarSystemImplementation'); % add Matlab API
+%             clear all %#ok<CLSCR>
+%             close all
+%             resetRS; % close and delete ports
+
+            % 1. Create radar system object
+            szPort = findRSPort; % scan all available ports
+            oRS = RadarSystem(szPort); % setup object and connect to board
+            
+            oRS
+            
+             oRS.oEPRadarBase.stop_automatic_frame_trigger; % stop it to change values
+% 
+% %  properties of radar
+   oRS.oEPRadarFMCW.lower_frequency_kHz = 24025000; % lower FMCW frequency 
+   oRS.oEPRadarFMCW.upper_frequency_kHz = 24225000; % upper FMCW frequency 
+   oRS.oEPRadarBase.num_chirps_per_frame = 16;  %[1,128]
+   oRS.oEPRadarBase.num_samples_per_chirp = 128; % [32, 64, 128, 256] 
+   oRS.oEPRadarADCXMC.samplerate_Hz = 640000; % 640000 affects the chirp time
+   oRS.oEPRadarFMCW.direction = 'Up Only';
+   oRS.oEPTargetDetection.min_range_cm = 90; % set max distance
+   oRS.oEPTargetDetection.max_range_cm = 300;
+    
+    % 2. Enable automatic trigger with frame time 1s
+   oRS.oEPRadarBase.set_automatic_frame_trigger(1000000);
+   
+   c = 3e8;
+snum = double(oRS.oEPRadarBase.num_samples_per_chirp); % sample per chirp
+cnum = double(oRS.oEPRadarBase.num_chirps_per_frame); % chirp per frame
+fs = double(oRS.oEPRadarADCXMC.samplerate_Hz);  % samppling freq
+bw = double(oRS.oEPRadarFMCW.bandwidth_per_second); % chcirpslope in microsec
+ts =  double(oRS.oEPRadarBase.chirp_duration_ns); % chirp duration(ns) 
+t =  0 : 1/fs : (1e-9*ts)-(1/fs); 
+f1= double(oRS.oEPRadarFMCW.lower_frequency_kHz)*1e3; % min freq 
+f2= double(oRS.oEPRadarFMCW.upper_frequency_kHz)*1e3; % max freq
+f= f1: (f2-f1)/snum: f2-((f2-f1)/snum); 
+chirpslope = (f2-f1)/(t(end));
+
+threshhold = 15;
+
+minrange = 0.9; maxrange= 3;
+minbeatfreq = ((chirpslope)*2*minrange)/c ;
+maxbeatfreq = ((chirpslope)*2*maxrange)/c ;
+% % % % Variables needed for audio capability
+            maxrange = 3; % in meters
+            range_interval = (maxrange-minrange)/4;
+            s1_range = maxrange - (range_interval);
+            s2_range = maxrange - (2*range_interval);
+            s4_range = maxrange - (3*range_interval);
+            s3_range = minrange;
+            instrument = "piano";
+            angle_buffer = 5;
+            range_buffer = 0.2;
+            prev_range = 0;
+
+fC = (f2+f1)/2;
+lambda = c / fC;
+antenna_spacing = 6.22e-3; % in meters
+
+ t_radius = 0;
+   
+            while get(app.StartStopButton, 'value')
+                
+                run('range_angle_sound_1.m')
+            
+                app.RangemGauge.Value = max_target;
+                app.AngledegGauge.Value = t_angle_az;
+                
+                plot(app.UIAxes, rang, yfinal_range)
+                          
+                drawnow; pause(0.1);
+                
+            end
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [100 100 640 480];
+            app.UIFigure.Name = 'UI Figure';
+
+            % Create StartStopButton
+            app.StartStopButton = uibutton(app.UIFigure, 'state');
+            app.StartStopButton.ValueChangedFcn = createCallbackFcn(app, @StartStopButtonValueChanged, true);
+            app.StartStopButton.Text = 'Start/Stop';
+            app.StartStopButton.Position = [36 421 100 22];
+
+            % Create UIAxes
+            app.UIAxes = uiaxes(app.UIFigure);
+            title(app.UIAxes, 'Frequency Domain Signal')
+            xlabel(app.UIAxes, 'Range (m)')
+            ylabel(app.UIAxes, 'Magnitude')
+            app.UIAxes.Position = [159 70 360 216];
+
+            % Create AngledegGaugeLabel
+            app.AngledegGaugeLabel = uilabel(app.UIFigure);
+            app.AngledegGaugeLabel.HorizontalAlignment = 'center';
+            app.AngledegGaugeLabel.Position = [426 362 68 22];
+            app.AngledegGaugeLabel.Text = 'Angle (deg)';
+
+            % Create AngledegGauge
+            app.AngledegGauge = uigauge(app.UIFigure, 'semicircular');
+            app.AngledegGauge.Limits = [-45 45];
+            app.AngledegGauge.Position = [399 399 120 65];
+
+            % Create RangemGaugeLabel
+            app.RangemGaugeLabel = uilabel(app.UIFigure);
+            app.RangemGaugeLabel.HorizontalAlignment = 'center';
+            app.RangemGaugeLabel.Position = [264 375 62 22];
+            app.RangemGaugeLabel.Text = 'Range (m)';
+
+            % Create RangemGauge
+            app.RangemGauge = uigauge(app.UIFigure, 'linear');
+            app.RangemGauge.Limits = [0 5];
+            app.RangemGauge.Position = [234 412 118.989583492279 40];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = range_angle_sound_1_app
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
